@@ -112,9 +112,18 @@
         bar.setAttribute("aria-valuenow", pct);
         msg.textContent = (pct >= 100 ? T.starting : T.loading) + " " + pct + " %";
       }
+      // Field report (iPhone browser: "very laggy"). Unity renders at the full devicePixelRatio, 3 on iPhones: about
+      // 2.5 million pixels a frame with bloom. Phones and tablets get at most 1.5 (about 4x fewer pixels; the UI stays
+      // sharp enough to read), desktops 2. The game also lowers its 3D resolution while frames run slow
+      // (AdaptiveResolution). ?dpr=N overrides the cap for tests.
+      var touch = ("ontouchstart" in window) || (navigator.maxTouchPoints || 0) > 0;
+      var dpr = Math.min(window.devicePixelRatio || 1, touch ? 1.5 : 2);
+      var dprArg = /[?&]dpr=([0-9.]+)/.exec(location.search);
+      if (dprArg) dpr = Math.max(0.5, Math.min(4, parseFloat(dprArg[1])));
       function start() {
         createUnityInstance(canvas, {
           arguments: [],
+          devicePixelRatio: dpr,
           dataUrl: "Build/web.data.unityweb",
           frameworkUrl: "Build/web.framework.js.unityweb",
           codeUrl: "Build/web.wasm.unityweb",
