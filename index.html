@@ -35,7 +35,14 @@
       #tag { margin: 0; font-size: clamp(16px, 2.6vmin, 22px); font-weight: 600; }
       #hook { margin: 4px 0 0; font-size: clamp(15px, 2.4vmin, 20px); color: #FFB347; }
       #offer { margin: 0 0 10px; font-size: clamp(13px, 2vmin, 16px); color: #C9BBD6; }
-      #bar { width: min(70vw, 420px); height: 16px; border-radius: 8px; background: rgba(255,255,255,.08); overflow: hidden; box-shadow: inset 0 0 0 2px rgba(255,255,255,.08); }
+      #bar { position: relative; width: min(70vw, 420px); height: 16px; border-radius: 8px; background: rgba(255,255,255,.08); overflow: hidden; box-shadow: inset 0 0 0 2px rgba(255,255,255,.08); }
+      /* Field report 2026-10-21: "no mostraba el estado de carga al iniciar". While nothing measurable moves (before the
+         first byte, and while the engine compiles and builds the first scene) a light sweeps the bar. It is a transform
+         animation, so the compositor keeps it moving even when the main thread is busy compiling. */
+      #bar.busy::after { content: ""; position: absolute; top: 0; bottom: 0; left: 0; width: 40%; border-radius: 8px;
+                         background: linear-gradient(90deg, rgba(255,216,102,0), rgba(255,216,102,.65), rgba(255,216,102,0));
+                         animation: sweep 1.1s linear infinite; }
+      @keyframes sweep { from { transform: translateX(-100%); } to { transform: translateX(250%); } }
       #fill { width: 0%; height: 100%; border-radius: 8px; background: linear-gradient(90deg, #FF6A2A, #FFD866); transition: width .2s ease-out; }
       #msg { font-size: 15px; opacity: .8; min-height: 1.2em; font-variant-numeric: tabular-nums; }
       #tip { width: min(86vw, 460px); min-height: 3.6em; margin-top: 8px; padding: 12px 16px; box-sizing: border-box; border-left: 4px solid #FFD866; border-radius: 10px;
@@ -46,7 +53,7 @@
       #retry { min-width: 180px; min-height: 52px; padding: 0 28px; border: 0; border-radius: 26px; background: #FF8A2A; color: #1A1220; font: 700 18px system-ui, sans-serif; cursor: pointer; }
       #loader.failed #bar, #loader.failed #msg, #loader.failed #tip { display: none; }
       #loader.failed #err { display: flex; }
-      @media (prefers-reduced-motion: reduce) { #loader, #fill, #tip { transition: none; } }
+      @media (prefers-reduced-motion: reduce) { #loader, #fill, #tip { transition: none; } #bar.busy::after { animation: none; opacity: .5; left: 30%; } }
     </style>
   </head>
   <body>
@@ -56,7 +63,7 @@
       <p id="tag">Vierte chispas. Forja reliquias. Resiste la oleada.</p>
       <p id="hook">Cada enemigo que cae vuelve a tu crisol</p>
       <p id="offer">Un capítulo completo, sin anuncios ni compras</p>
-      <div id="bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><div id="fill"></div></div>
+      <div id="bar" class="busy" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><div id="fill"></div></div>
       <div id="msg" role="status" aria-live="polite">Cargando la forja…</div>
       <div id="tip"></div>
       <div id="err" role="alert"><p id="errText"></p><button id="retry" type="button">Reintentar</button><small id="errDetail"></small></div>
@@ -84,7 +91,7 @@
       document.documentElement.lang = es ? "es" : "en";
       function $(id) { return document.getElementById(id); }
       $("tag").textContent = T.tag; $("hook").textContent = T.hook; $("offer").textContent = T.offer;
-      $("msg").textContent = T.loading; $("retry").textContent = T.retry;
+      $("msg").textContent = T.loading + " 0 %"; $("retry").textContent = T.retry;
       var tipEl = $("tip"), tipIndex = 0;
       tipEl.textContent = T.tips[0];
       var tipTimer = setInterval(function () {
@@ -106,12 +113,69 @@
         loader.classList.add("failed");
         console.error(detail);
       }
-      function progress(p) {
-        var pct = Math.max(0, Math.min(100, Math.round(p * 100)));
+      // Field report 2026-10-21 ("no mostraba el estado de carga al iniciar"). Unity's own progress needs a Content-Length
+      // on every file: without one (some proxies and compressing CDNs; tools/webtest/server.mjs NO_LENGTH=1) it jumped
+      // to 90 % at once and the bar stood still for the whole download. The page also counts the engine's bytes itself
+      // (fetch wrapper below) and shows megabytes when no total is known.
+      var dl = { got: 0, total: 0, unknown: 0, open: 0, seen: {} }, unityPct = 0;
+      function mb(b) { var t = (b / 1048576).toFixed(1); return (es ? t.replace(".", ",") : t) + " MB"; }
+      function render() {
+        var pct = unityPct;
+        if (dl.total > 0 && !dl.unknown) pct = Math.max(pct, Math.min(90, Math.round(90 * dl.got / dl.total)));
+        var downloading = dl.open > 0;
+        if (downloading && dl.unknown > 0) pct = 0;   // no total: the sweep carries the motion, the text the megabytes
         fill.style.width = pct + "%";
         bar.setAttribute("aria-valuenow", pct);
-        msg.textContent = (pct >= 100 ? T.starting : T.loading) + " " + pct + " %";
+        // Nothing measurable moves before the first byte, while the size is unknown and while the engine starts.
+        bar.classList.toggle("busy", pct <= 0 || (downloading && dl.unknown > 0) || (!downloading && pct >= 90));
+        if (downloading && dl.unknown > 0) msg.textContent = T.loading + " " + mb(dl.got);
+        else if (downloading || pct < 90) msg.textContent = T.loading + " " + Math.min(pct, 90) + " %";
+        else msg.textContent = T.starting;
       }
+      function progress(p) { unityPct = Math.max(0, Math.min(100, Math.round(p * 100))); render(); }
+      if (window.fetch && window.ReadableStream && window.Response) {
+        var baseFetch = window.fetch;
+        window.fetch = function (input, init) {
+          var url = typeof input === "string" ? input : (input && input.url) || "";
+          var req = baseFetch.apply(this, arguments);
+          if (!/Build\/[^?#]*\.unityweb/.test(url)) return req;
+          return req.then(function (res) {
+            try {
+              if (!res.ok || !res.body || dl.seen[url]) return res;
+              dl.seen[url] = true;
+              var len = parseInt(res.headers.get("Content-Length"), 10);
+              if (len > 0) dl.total += len; else dl.unknown++;
+              dl.open++;
+              var reader = res.body.getReader(), closed = false;
+              var done = function () { if (!closed) { closed = true; dl.open--; render(); } };
+              var body = new ReadableStream({
+                pull: function (c) {
+                  return reader.read().then(function (r) {
+                    if (r.done) { done(); c.close(); return; }
+                    dl.got += r.value.byteLength;
+                    render();
+                    c.enqueue(r.value);
+                  }, function (e) { done(); c.error(e); });
+                },
+                cancel: function (why) { done(); return reader.cancel(why); }
+              });
+              return new Response(body, { status: res.status, statusText: res.statusText, headers: res.headers });
+            } catch (e) { return res; }
+          });
+        };
+      }
+      // The loader stays until the game has drawn its first frames (the jslib raises "sparkfall-ready"), not only until
+      // the engine exists: on phones the first scene can take seconds after that and the screen used to stay empty.
+      var shown = false;
+      function reveal() {
+        if (shown) return;
+        shown = true;
+        clearInterval(tipTimer);
+        loader.style.opacity = "0";
+        setTimeout(function () { loader.remove(); }, 600);
+        canvas.focus();
+      }
+      window.addEventListener("sparkfall-ready", reveal);
       // Field reports (iPhone Safari). At the full devicePixelRatio (3 on iPhones, about 2.5 million pixels a frame
       // with bloom) it was "very laggy"; capped at 1.5 it ran smoothly on an iPhone 15 but looked "much worse". So the
       // page starts at 2 (2.25x fewer pixels than 3, crisp text) and the game steps down only when frames run slow:
@@ -138,10 +202,9 @@
           var persist = function () { try { instance.SendMessage('GameRoot', 'WebCmd', 'persist'); } catch (e) {} };
           document.addEventListener('visibilitychange', function () { if (document.visibilityState === 'hidden') persist(); });
           window.addEventListener('pagehide', persist);
-          clearInterval(tipTimer);
-          loader.style.opacity = "0";
-          setTimeout(function () { loader.remove(); }, 600);
-          canvas.focus();
+          msg.textContent = T.starting;
+          bar.classList.add("busy");
+          setTimeout(reveal, 20000);   // an older cached build never raises the event
         })
         .catch(fail);
       }
