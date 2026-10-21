@@ -133,6 +133,11 @@
         }, progress)
         .then(function (instance) {
           window.sparkfall = instance;
+          // Cup Heroes study CH3a.13: save when the tab is hidden or closed (mobile browsers may kill a background tab
+          // without any further event; Unity's OnApplicationPause is not raised for a hidden tab).
+          var persist = function () { try { instance.SendMessage('GameRoot', 'WebCmd', 'persist'); } catch (e) {} };
+          document.addEventListener('visibilitychange', function () { if (document.visibilityState === 'hidden') persist(); });
+          window.addEventListener('pagehide', persist);
           clearInterval(tipTimer);
           loader.style.opacity = "0";
           setTimeout(function () { loader.remove(); }, 600);
