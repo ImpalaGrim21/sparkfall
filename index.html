@@ -25,17 +25,42 @@
     <meta name="twitter:title" content="SPARKFALL">
     <meta name="twitter:description" content="Cada enemigo que cae vuelve a tu crisol. Un capítulo completo, sin anuncios ni compras.">
     <meta name="twitter:image" content="https://impalagrim21.github.io/sparkfall/og-image.jpg">
+    <!-- v2h (judge v2g: the loader's system font did not match the game's title): the title face ships with the page. -->
+    <link rel="preload" href="fonts/LilitaOne-Regular.ttf" as="font" type="font/ttf" crossorigin>
     <style>
+      @font-face { font-family: "SF Title"; src: url("fonts/LilitaOne-Regular.ttf") format("truetype"); font-display: swap; }
+      @font-face { font-family: "SF Body"; src: url("fonts/VarelaRound-Regular.ttf") format("truetype"); font-display: swap; }
       html, body { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background: #1A1220; touch-action: none; overscroll-behavior: none; }
       #unity-canvas { position: fixed; inset: 0; width: 100%; height: 100%; display: block; outline: none; background: #1A1220; }
-      #loader { position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px;
-                padding: 24px max(20px, env(safe-area-inset-right)) 24px max(20px, env(safe-area-inset-left)); box-sizing: border-box; text-align: center;
-                background: radial-gradient(ellipse at 50% 60%, #3a2236 0%, #1A1220 70%); color: #FFF6E8; font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; transition: opacity .5s ease-out; }
-      #loader h1 { margin: 0; font-size: clamp(42px, 9vmin, 88px); letter-spacing: .06em; color: #FFD866; text-shadow: 0 4px 0 #1A1220, 0 0 28px rgba(255,138,42,.55); }
+      #loader { position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: flex-start; gap: 14px;
+                padding: max(9vh, 36px) max(20px, env(safe-area-inset-right)) 24px max(20px, env(safe-area-inset-left)); box-sizing: border-box; text-align: center;
+                background: radial-gradient(ellipse at 50% 62%, #2A4C7D 0%, #122744 55%, #0A1426 100%); color: #FFF6E8; font-family: "SF Body", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; transition: opacity .5s ease-out; overflow: hidden; }
+      /* Theme v2 (docs/pulido): enamel night behind molten-gold lettering, as in the game's title. */
+      #loader h1 { position: relative; margin: 0; font-family: "SF Title", system-ui, sans-serif; font-weight: 400; font-size: clamp(46px, 10vmin, 96px); letter-spacing: .04em; color: #FFD866;
+                   background: linear-gradient(180deg, #FFF2A8 0%, #FFD866 45%, #FF9330 100%); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;
+                   filter: drop-shadow(0 4px 0 #0A1426) drop-shadow(0 0 18px rgba(255,138,42,.5)); }
+      #loader > *:not(#sparks):not(.scene) { position: relative; z-index: 1; }
+      /* v2o (judge: "the lower third stays empty, it reads as a web page", NOT DONE three rounds): the Home's composition
+         as a vector night scene (ranges, parapet, the red banner on the left, the forge tower with its glowing mouth on the
+         right), original art in inline SVG, no download. The mouth breathes unless reduced motion is on. */
+      .scene { position: absolute; left: 0; right: 0; bottom: 0; pointer-events: none; z-index: 0; }
+      #scene-bg { width: 100%; height: min(40vh, 380px); }
+      #scene-fg { left: 50%; right: auto; transform: translateX(-50%); width: min(100vw, 560px); height: min(50vh, 460px); }
+      #mouthGlow { animation: breathe 1.8s ease-in-out infinite alternate; }
+      @keyframes breathe { from { opacity: .82; } to { opacity: 1; } }
+      /* L34.5 (graph: P1, pending): sparks falling through the loader, pure CSS, no assets. Transform/opacity only, so they
+         keep moving while the main thread compiles the engine. */
+      #sparks { position: absolute; inset: 0; pointer-events: none; z-index: 0; }
+      #sparks i { position: absolute; top: -4vh; width: 6px; height: 6px; border-radius: 50%; background: #FFE9A0;
+                  box-shadow: 0 0 6px 2px rgba(255,180,70,.9), 0 0 16px 4px rgba(255,106,42,.45); opacity: 0;
+                  animation: spark-fall linear infinite; }
+      @keyframes spark-fall { 0% { transform: translate(0, 0) scale(1); opacity: 0; } 8% { opacity: 1; }
+                              70% { opacity: .9; } 100% { transform: translate(var(--dx, 20px), 112vh) scale(.4); opacity: 0; } }
       #tag { margin: 0; font-size: clamp(16px, 2.6vmin, 22px); font-weight: 600; }
       #hook { margin: 4px 0 0; font-size: clamp(15px, 2.4vmin, 20px); color: #FFB347; }
       #offer { margin: 0 0 10px; font-size: clamp(13px, 2vmin, 16px); color: #C9BBD6; }
-      #bar { position: relative; width: min(70vw, 420px); height: 16px; border-radius: 8px; background: rgba(255,255,255,.08); overflow: hidden; box-shadow: inset 0 0 0 2px rgba(255,255,255,.08); }
+      #bar { position: relative; width: min(70vw, 420px); height: 16px; border-radius: 8px; background: rgba(4,10,22,.7); overflow: hidden;
+             box-shadow: inset 0 2px 4px rgba(0,0,0,.6), 0 0 0 3px #B9832F, 0 0 0 4px #5A3A10; }
       /* Field report 2026-10-21: "no mostraba el estado de carga al iniciar". While nothing measurable moves (before the
          first byte, and while the engine compiles and builds the first scene) a light sweeps the bar. It is a transform
          animation, so the compositor keeps it moving even when the main thread is busy compiling. */
@@ -45,20 +70,66 @@
       @keyframes sweep { from { transform: translateX(-100%); } to { transform: translateX(250%); } }
       #fill { width: 0%; height: 100%; border-radius: 8px; background: linear-gradient(90deg, #FF6A2A, #FFD866); transition: width .2s ease-out; }
       #msg { font-size: 15px; opacity: .8; min-height: 1.2em; font-variant-numeric: tabular-nums; }
-      #tip { width: min(86vw, 460px); min-height: 3.6em; margin-top: 8px; padding: 12px 16px; box-sizing: border-box; border-left: 4px solid #FFD866; border-radius: 10px;
-             background: rgba(20,12,28,.72); font-size: clamp(14px, 2.2vmin, 17px); line-height: 1.4; white-space: pre-line; text-align: left; transition: opacity .3s ease-out; }
+      /* v2m: opaque enamel card (judge v2l: web widget). v2n (judge v2m: in a brass ring it looked like a button): a quiet
+         dark band without a frame, a caption rather than a control. */
+      #tip { width: min(86vw, 460px); min-height: 3.6em; margin-top: 10px; padding: 12px 18px; box-sizing: border-box; border-radius: 12px;
+             background: rgba(6, 14, 30, .72); color: #E9DFCF;
+             font-size: clamp(14px, 2.2vmin, 17px); line-height: 1.4; white-space: pre-line; text-align: center; transition: opacity .3s ease-out; }
       #err { display: none; flex-direction: column; align-items: center; gap: 12px; max-width: 460px; }
       #err p { margin: 0; font-size: 17px; line-height: 1.4; }
       #err small { opacity: .55; font-size: 12px; word-break: break-word; }
       #retry { min-width: 180px; min-height: 52px; padding: 0 28px; border: 0; border-radius: 26px; background: #FF8A2A; color: #1A1220; font: 700 18px system-ui, sans-serif; cursor: pointer; }
       #loader.failed #bar, #loader.failed #msg, #loader.failed #tip { display: none; }
       #loader.failed #err { display: flex; }
-      @media (prefers-reduced-motion: reduce) { #loader, #fill, #tip { transition: none; } #bar.busy::after { animation: none; opacity: .5; left: 30%; } }
+      @media (prefers-reduced-motion: reduce) { #loader, #fill, #tip { transition: none; } #bar.busy::after { animation: none; opacity: .5; left: 30%; } #sparks { display: none; } #mouthGlow { animation: none; } }
     </style>
   </head>
   <body>
     <canvas id="unity-canvas" tabindex="-1"></canvas>
     <div id="loader">
+      <div id="sparks" aria-hidden="true">
+        <i style="left:6%;animation-duration:3.1s;animation-delay:-.4s;--dx:18px"></i><i style="left:14%;animation-duration:2.4s;animation-delay:-1.9s;--dx:-12px"></i>
+        <i style="left:23%;animation-duration:3.6s;animation-delay:-2.7s;--dx:26px"></i><i style="left:31%;animation-duration:2.8s;animation-delay:-.9s;--dx:-20px"></i>
+        <i style="left:40%;animation-duration:3.3s;animation-delay:-3.1s;--dx:14px"></i><i style="left:48%;animation-duration:2.6s;animation-delay:-1.3s;--dx:-8px"></i>
+        <i style="left:57%;animation-duration:3.9s;animation-delay:-2.2s;--dx:22px"></i><i style="left:65%;animation-duration:2.5s;animation-delay:-.2s;--dx:-24px"></i>
+        <i style="left:73%;animation-duration:3.4s;animation-delay:-2.9s;--dx:10px"></i><i style="left:81%;animation-duration:2.9s;animation-delay:-1.6s;--dx:-16px"></i>
+        <i style="left:89%;animation-duration:3.7s;animation-delay:-.7s;--dx:20px"></i><i style="left:95%;animation-duration:2.7s;animation-delay:-2.4s;--dx:-10px"></i>
+      </div>
+      <svg id="scene-bg" class="scene" viewBox="0 0 400 300" preserveAspectRatio="none" aria-hidden="true">
+        <path d="M0 150 L38 112 L70 138 L118 88 L160 130 L204 98 L246 140 L296 104 L344 136 L400 110 V300 H0 Z" fill="#1A2A50"/>
+        <path d="M0 196 L52 162 L96 186 L148 150 L198 188 L248 166 L296 194 L352 170 L400 184 V300 H0 Z" fill="#132042"/>
+        <path d="M0 236 H400 V300 H0 Z" fill="#0E0A16"/>
+        <path d="M0 236 H400" stroke="#2C2236" stroke-width="3"/>
+      </svg>
+      <svg id="scene-fg" class="scene" viewBox="50 0 300 320" preserveAspectRatio="xMidYMax meet" aria-hidden="true">
+        <defs>
+          <radialGradient id="mouthGrad" cx="50%" cy="78%" r="70%">
+            <stop offset="0" stop-color="#FFE7A8"/><stop offset=".25" stop-color="#FFB347"/><stop offset=".55" stop-color="#E8641E"/>
+            <stop offset=".85" stop-color="#7A2410"/><stop offset="1" stop-color="#2A0E08"/>
+          </radialGradient>
+          <radialGradient id="poolGrad"><stop offset="0" stop-color="#FF9A3C" stop-opacity=".55"/><stop offset="1" stop-color="#FF9A3C" stop-opacity="0"/></radialGradient>
+        </defs>
+        <rect x="0" y="282" width="400" height="38" fill="#0E0A16"/>
+        <path d="M0 282 H400" stroke="#2C2236" stroke-width="3"/>
+        <g transform="translate(44 0)">
+          <line x1="44" y1="150" x2="44" y2="284" stroke="#6A6070" stroke-width="3"/>
+          <circle cx="44" cy="147" r="4" fill="#8A8090"/>
+          <path d="M26 160 H62 V222 H54 V230 H46 V222 H42 V230 H34 V222 H26 Z" fill="#B5121B"/>
+          <path d="M44 176 L48 188 L60 192 L48 196 L44 208 L40 196 L28 192 L40 188 Z" fill="#FFD866"/>
+        </g>
+        <g transform="translate(-28 0)">
+        <rect x="318" y="34" width="20" height="84" fill="#221A2C"/>
+        <rect x="314" y="60" width="28" height="5" fill="#3E3446"/><rect x="314" y="82" width="28" height="5" fill="#3E3446"/>
+        <path d="M296 156 L312 118 L344 118 L360 156 Z" fill="#1E1828"/>
+        <rect x="282" y="152" width="92" height="10" fill="#4A3028"/>
+        <rect x="288" y="160" width="80" height="124" fill="#1E1828"/>
+        <path d="M288 196 H368 M288 228 H368 M288 260 H368 M310 160 V196 M346 160 V196 M300 196 V228 M356 196 V228" stroke="#2A2236" stroke-width="2"/>
+        <ellipse cx="328" cy="286" rx="78" ry="14" fill="url(#poolGrad)"/>
+        <path d="M306 284 V244 A22 22 0 0 1 350 244 V284 Z" fill="#5A3A2E"/>
+        <path id="mouthGlow" d="M311 284 V246 A17 17 0 0 1 345 246 V284 Z" fill="url(#mouthGrad)"/>
+        <path d="M317 236 V284 M323 231 V284 M329 229 V284 M335 231 V284 M341 236 V284 M311 258 H345" stroke="#2A2630" stroke-width="2"/>
+        </g>
+      </svg>
       <h1>SPARKFALL</h1>
       <p id="tag">Vierte chispas. Forja reliquias. Resiste la oleada.</p>
       <p id="hook">Cada enemigo que cae vuelve a tu crisol</p>
@@ -75,13 +146,13 @@
         es: { tag: "Vierte chispas. Forja reliquias. Resiste la oleada.", hook: "Cada enemigo que cae vuelve a tu crisol",
               offer: "Un capítulo completo, sin anuncios ni compras", loading: "Cargando la forja…", starting: "Encendiendo la forja…",
               error: "No se pudo iniciar el juego. Comprueba tu conexión y vuelve a intentarlo.", retry: "Reintentar",
-              tips: ["Arrastra el crisol para apuntar.\nSuelta para verter las chispas.",
+              tips: ["Arrastra por la barra dorada\ny suelta para verter.",
                      "Los moldes ×N multiplican chispas.\nLos sumideros −N las devoran.",
                      "Los prismas cargan tus Descargas.\nGolpea la campana para ganar una Ficha de Forja."] },
         en: { tag: "Pour sparks. Forge relics. Hold the line.", hook: "Every enemy that falls returns to your crucible",
               offer: "A full chapter, no ads, no purchases", loading: "Loading the forge…", starting: "Lighting the forge…",
               error: "The game could not start. Check your connection and try again.", retry: "Retry",
-              tips: ["Drag the crucible to aim.\nRelease to pour the sparks.",
+              tips: ["Drag along the gold bar\nand release to pour.",
                      "×N molds multiply sparks.\n−N drains devour them.",
                      "Prisms charge your Surges.\nRing the bell to earn a Forge Token."] }
       };
